@@ -252,16 +252,28 @@ namespace MediaSyncTestsConsoleApp1
                 }
             }
 
+            var inputVid = "";
+            var start = "";
+            TimeSpan duration = new TimeSpan(200000000);
+            TimeSpan offset = new TimeSpan(530000000);
 
-           foreach(var t in triggers)
-           {
-                ProcessTrigger(t, footageList);
+            foreach (var t in triggers)
+            {
+                foreach (var f in footageList)
+                {
+                    foreach (var v in f.Value)
+                    {
+                        if (v.Within(t.CreateDate))
+                        {
+                            inputVid = v.FileName;
+                            start = (t.CreateDate - (v.CreateDate - offset)).ToString();
 
-                Console.WriteLine(t.CreateDate);
-           }
+                        }
+                    }
+                }
+            }
 
-            Split(@"C:\Users\Owner\Documents\Footage\HERO5 Black 1\GP031166.MP4", "0", "10", "output.mp4");
-
+            Split(inputVid, start, duration.ToString(), "output000.mp4");
             var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
             File.WriteAllText(footageListFileName, sb.ToString());
         }
@@ -294,12 +306,10 @@ namespace MediaSyncTestsConsoleApp1
             }
         }
 
+
+
         static void ProcessTrigger(Trigger t, Dictionary<string, IList<Footage>> allfootage)
         {
-            foreach(var f in allfootage)
-            {
-                
-            }
 
         }
 
