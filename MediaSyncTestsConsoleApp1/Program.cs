@@ -106,6 +106,36 @@ namespace MediaSyncTestsConsoleApp1
         const string ffmpeg = ffmpegLocation + @"\ffmpeg.exe";
         const string ffprobe = ffmpegLocation + @"\ffprobe.exe";
 
+        static void Combine(List<string> inputs, string outputFile)
+        {
+            var endStuff = $@" -filter_complex ""[0:v] [0:a] [1:v] [1:a] concat=n={inputs.Count().ToString()}:v = 1:a = 1[v][a]"" -map ""[v]"" -map ""[a]"" {outputFile} ";
+            var startStuff = "ffmpeg ";
+            foreach (var i in inputs)
+            {
+                startStuff += "-i " + i + " ";
+            }
+            var a2 = startStuff + endStuff;
+
+                //SO CLOSE! a2 works when I manually run it on different folder w/ copied files. 
+                //prompt closes too fast to see error
+
+            var psi = new ProcessStartInfo(ffmpeg, a2)
+            {
+                RedirectStandardInput = false,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                UseShellExecute = false
+            };
+
+            var p = new Process { StartInfo = psi };
+            p.Start();
+
+            while (!p.HasExited)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+        }
+
         static void Combine(string firstFile, string secondFile, string outputFile)
         {
             // https://stackoverflow.com/questions/7333232/how-to-concatenate-two-mp4-files-using-ffmpeg
@@ -117,7 +147,7 @@ namespace MediaSyncTestsConsoleApp1
                 RedirectStandardError = false,
                 UseShellExecute = false
             };
-
+            
             var p = new Process { StartInfo = psi };
             p.Start();
 
@@ -153,122 +183,133 @@ namespace MediaSyncTestsConsoleApp1
             // output each trigger and which footage files that contain it
             // output lists of footage folders in chronological order
             // output list of everything in chronological order
+            var subOutputNum = 0;
+            var outputList = new List<string>();
 
-            var triggers = new List<Trigger>();
-            var footageList = new Dictionary<string, IList<Footage>>();
-
-            foreach (var d in Directory.EnumerateDirectories(folder))
+            foreach (var subFolder in Directory.EnumerateDirectories(folder))
             {
-                Console.WriteLine(d);
-                if (d.Contains("iPhone"))
+                subOutputNum++;
+                var triggers = new List<Trigger>();
+                var footageList = new Dictionary<string, IList<Footage>>();
+
+                foreach (var d in Directory.EnumerateDirectories(subFolder))
                 {
-                    // load triggers
-                    foreach (var f in (new DirectoryInfo(d)).EnumerateFiles())
+                    Console.WriteLine(d);
+                    if (d.Contains("iPhone"))
                     {
-                        if (f.Extension.ToUpper() == ".JPG")
+                        // load triggers
+                        foreach (var f in (new DirectoryInfo(d)).EnumerateFiles())
                         {
-                            var pu = new RandomWayfarer.Pictures.PictureUtils();
-                            var pic = pu.GetJpegPicture(f.FullName);
-                            if (pic != null)
+                            if (f.Extension.ToUpper() == ".JPG")
                             {
+                                var pu = new RandomWayfarer.Pictures.PictureUtils();
+                                var pic = pu.GetJpegPicture(f.FullName);
+                                if (pic != null)
+                                {
+                                    triggers.Add(new Trigger
+                                    {
+                                        CreateDate = pic.DateTime,
+                                        FileName = f.FullName
+                                    });
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Invalid {f.FullName}");
+                                }
+                            }
+                            else if (f.Extension.ToUpper() == ".MOV")
+                            {
+                                var v = GetInfo(f.FullName);
+                                var s = v.streams.Where(vv => vv.codec_type == "video").First();
+                                var cd = s.Tags["creation_time"];
                                 triggers.Add(new Trigger
                                 {
-                                    CreateDate = pic.DateTime,
-                                    FileName = f.FullName
+                                    FileName = f.FullName,
+                                    CreateDate = Convert.ToDateTime(cd)
+                                });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var footage = new List<Footage>();
+                        var ff = Path.GetFullPath(d);
+                        var footageSourceName = ff.Split('\\').Reverse().First();
+                        footageList.Add(footageSourceName, footage);
+                        // load footage files
+                        foreach (var f in (new DirectoryInfo(d)).EnumerateFiles())
+                        {
+                            var v = GetInfo(f.FullName);
+                            var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
+                            if (s != null)
+                            {
+                                var cd = s.Tags["creation_time"];
+                                footage.Add(new Footage
+                                {
+                                    FileName = f.FullName,
+                                    CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone
+                                    Duration = s.duration
                                 });
                             }
                             else
                             {
-                                Console.WriteLine($"Invalid {f.FullName}");
+                                Console.WriteLine($"INVALID : {f.FullName}");
+
                             }
                         }
-                        else if (f.Extension.ToUpper() == ".MOV")
+                    }
+                }
+
+                foreach (var trig in triggers)
+                {
+                    foreach (var foot in footageList)
+                    {
+                        foreach (var x in foot.Value)
                         {
-                            var v = GetInfo(f.FullName);
-                            var s = v.streams.Where(vv => vv.codec_type == "video").First();
-                            var cd = s.Tags["creation_time"];
-                            triggers.Add(new Trigger
-                            {
-                                FileName = f.FullName,
-                                CreateDate = Convert.ToDateTime(cd)
-                            });
+                            trig.CheckAddFootage(foot.Key, x);
                         }
                     }
                 }
-                else
-                {
-                    var footage = new List<Footage>();
-                    var ff = Path.GetFullPath(d);
-                    var footageSourceName = ff.Split('\\').Reverse().First();
-                    footageList.Add(footageSourceName, footage);
-                    // load footage files
-                    foreach (var f in (new DirectoryInfo(d)).EnumerateFiles())
-                    {
-                        var v = GetInfo(f.FullName);
-                        var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
-                        if (s != null)
-                        {
-                            var cd = s.Tags["creation_time"];
-                            footage.Add(new Footage
-                            {
-                                FileName = f.FullName,
-                                CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone
-                                Duration = s.duration
-                            });
-                        }
-                        else
-                        {
-                            Console.WriteLine($"INVALID : {f.FullName}");
 
+                var sb = new StringBuilder();
+                foreach (var f in footageList.First().Value.OrderBy(ff => ff.CreateDate))
+                {
+                    sb.AppendLine($"{f.FileName} : {f.CreateDate} + {f.Duration} = {f.EndDate}");
+                }
+                foreach (var trig in triggers)
+                {
+                    sb.AppendLine($"{trig.FileName} : {trig.CreateDate}");
+                    if (trig.Footage.Count > 0)
+                    {
+                        foreach (var f in trig.Footage.First().Value.OrderBy(ff => ff.CreateDate))
+                        {
+                            sb.AppendLine($"{f.FileName} : {f.CreateDate} + {f.Duration} = {f.EndDate}");
                         }
                     }
                 }
-            }
 
-            foreach (var trig in triggers)
-            {
-                foreach (var foot in footageList)
-                {
-                    foreach (var x in foot.Value)
-                    {
-                        trig.CheckAddFootage(foot.Key, x);
-                    }
-                }
-            }
+                outputList = RunSplit(triggers, footageList, subOutputNum, outputList);
+                if (outputList.Count() > 1) { break; }
 
-            var sb = new StringBuilder();
-            foreach (var f in footageList.First().Value.OrderBy(ff => ff.CreateDate))
-            {
-                sb.AppendLine($"{f.FileName} : {f.CreateDate} + {f.Duration} = {f.EndDate}");
-            }
-            foreach (var trig in triggers)
-            {
-                sb.AppendLine($"{trig.FileName} : {trig.CreateDate}");
-                if (trig.Footage.Count > 0)
-                {
-                    foreach (var f in trig.Footage.First().Value.OrderBy(ff => ff.CreateDate))
-                    {
-                        sb.AppendLine($"{f.FileName} : {f.CreateDate} + {f.Duration} = {f.EndDate}");
-                    }
-                }
-            }
+                
 
-            RunSplit(triggers, footageList);
+                var footageListFileName = Path.Combine(subFolder, $"footage{DateTime.Now.Ticks}.txt");
+                //File.WriteAllText(footageListFileName, sb.ToString());
+            }
+            Combine(outputList, "output.mp4");
 
-            var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
-            File.WriteAllText(footageListFileName, sb.ToString());
         }
 
-        public static void RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList)
+        public static List<string> RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList, int prefixOutput, List<string> outputs)
         {
             var inputVid = "";
             var start = "";
             var outputFile = "output";
             var outputNum = 0;
             var outputSuf = ".mp4";
-            TimeSpan duration = new TimeSpan(200000000);
-            TimeSpan offset = new TimeSpan(530000000);
-
+            TimeSpan duration = new TimeSpan(10000000);
+            TimeSpan offset = new TimeSpan(0000000);
+             
 
             foreach (var t in triggers)
             {
@@ -279,7 +320,8 @@ namespace MediaSyncTestsConsoleApp1
                         if (v.Within(t.CreateDate))
                         {
                             outputFile = "output";
-                            outputFile = outputFile + outputNum.ToString() + outputSuf;
+                            outputFile = prefixOutput.ToString() + outputFile + outputNum.ToString() + outputSuf;
+                            outputs.Add(outputFile);
                             inputVid = v.FileName;
                             start = (t.CreateDate - (v.CreateDate - offset)).ToString();
                             Split(inputVid, start, duration.ToString(), outputFile);
@@ -288,6 +330,10 @@ namespace MediaSyncTestsConsoleApp1
                     }
                 }
             }
+
+            return outputs;
+
+           
         }
 
         static Vids GetInfo(string inputFile)
@@ -320,7 +366,7 @@ namespace MediaSyncTestsConsoleApp1
 
         static void Main(string[] args)
         {//
-            ProcessFolder(@"C:\Users\Owner\Documents\Footage original");
+            ProcessFolder(@"D:\Footage");
 
             //foreach (var folder in Directory.EnumerateDirectories(@"E:\Footage"))
             //{
