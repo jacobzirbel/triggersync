@@ -157,7 +157,7 @@ namespace MediaSyncTestsConsoleApp1
             var triggers = new List<Trigger>();
             var footageList = new Dictionary<string, IList<Footage>>();
 
-            foreach(var d in Directory.EnumerateDirectories(folder))
+            foreach (var d in Directory.EnumerateDirectories(folder))
             {
                 Console.WriteLine(d);
                 if (d.Contains("iPhone"))
@@ -219,7 +219,7 @@ namespace MediaSyncTestsConsoleApp1
                         else
                         {
                             Console.WriteLine($"INVALID : {f.FullName}");
-                            
+
                         }
                     }
                 }
@@ -237,11 +237,12 @@ namespace MediaSyncTestsConsoleApp1
             }
 
             var sb = new StringBuilder();
-            foreach(var f in footageList.First().Value.OrderBy(ff => ff.CreateDate))
+            foreach (var f in footageList.First().Value.OrderBy(ff => ff.CreateDate))
             {
                 sb.AppendLine($"{f.FileName} : {f.CreateDate} + {f.Duration} = {f.EndDate}");
             }
-            foreach(var trig in triggers){
+            foreach (var trig in triggers)
+            {
                 sb.AppendLine($"{trig.FileName} : {trig.CreateDate}");
                 if (trig.Footage.Count > 0)
                 {
@@ -252,10 +253,22 @@ namespace MediaSyncTestsConsoleApp1
                 }
             }
 
+            RunSplit(triggers, footageList);
+
+            var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
+            File.WriteAllText(footageListFileName, sb.ToString());
+        }
+
+        public static void RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList)
+        {
             var inputVid = "";
             var start = "";
+            var outputFile = "output";
+            var outputNum = 0;
+            var outputSuf = ".mp4";
             TimeSpan duration = new TimeSpan(200000000);
             TimeSpan offset = new TimeSpan(530000000);
+
 
             foreach (var t in triggers)
             {
@@ -265,17 +278,16 @@ namespace MediaSyncTestsConsoleApp1
                     {
                         if (v.Within(t.CreateDate))
                         {
+                            outputFile = "output";
+                            outputFile = outputFile + outputNum.ToString() + outputSuf;
                             inputVid = v.FileName;
                             start = (t.CreateDate - (v.CreateDate - offset)).ToString();
-
+                            Split(inputVid, start, duration.ToString(), outputFile);
+                            outputNum++;
                         }
                     }
                 }
             }
-
-            Split(inputVid, start, duration.ToString(), "output000.mp4");
-            var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
-            File.WriteAllText(footageListFileName, sb.ToString());
         }
 
         static Vids GetInfo(string inputFile)
@@ -306,21 +318,9 @@ namespace MediaSyncTestsConsoleApp1
             }
         }
 
-
-
-        static void ProcessTrigger(Trigger t, Dictionary<string, IList<Footage>> allfootage)
-        {
-
-        }
-
-        static void ProcessTriggerInFootage(Trigger t, IList<Footage> footagefolder)
-        {
-
-        }
-
         static void Main(string[] args)
         {//
-            ProcessFolder(@"C:\Users\Owner\Documents\Footage");
+            ProcessFolder(@"C:\Users\Owner\Documents\Footage original");
 
             //foreach (var folder in Directory.EnumerateDirectories(@"E:\Footage"))
             //{
