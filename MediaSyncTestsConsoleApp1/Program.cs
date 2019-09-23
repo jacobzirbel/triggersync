@@ -116,8 +116,13 @@ namespace MediaSyncTestsConsoleApp1
             var a2 = startStuff + endStuff;
 
 
-                //SO CLOSE! a2 works when I manually run it on different folder w/ copied files. 
-                //prompt closes too fast to see error
+            //SO CLOSE! a2 works when I manually run it on different folder w/ copied files. 
+            //prompt closes too fast to see error
+
+            // TZ: I could put a breakpoint on the while and read the error.  
+            // It was "Unable to find a suitable output format for 'ffmpeg'"
+            // The process start info concatenates ffmpeg with a2.  
+            // The way it's written, when you run it in the program there are too many 'ffmpeg' calls. (ffmpeg.exe ffmpeg)
 
             var psi = new ProcessStartInfo(ffmpeg, a2)
             {
@@ -297,8 +302,8 @@ namespace MediaSyncTestsConsoleApp1
             var outputFile = "output";
             var outputNum = 0;
             var outputSuf = ".mp4";
-            TimeSpan duration = new TimeSpan(10000000);
-            TimeSpan offset = new TimeSpan(0000000);
+            TimeSpan duration = new TimeSpan(0, 1, 15);
+            TimeSpan offset = new TimeSpan(0, 0, -40);
              
 
             foreach (var t in triggers)
@@ -357,10 +362,17 @@ namespace MediaSyncTestsConsoleApp1
         static void Main(string[] args)
         {//@"C:\Users\Owner\Documents"
 
+            var inList = new List<string> {
+                @"C:\repos\triggersync\MediaSyncTestsConsoleApp1\bin\Debug\1output0.mp4",
+                @"C:\repos\triggersync\MediaSyncTestsConsoleApp1\bin\Debug\1output0.mp4"
+            };
+            Combine(inList, @"C:\repos\triggersync\MediaSyncTestsConsoleApp1\bin\Debug\CombineOutput.mp4");
+
+            string sourceFolder = args[0];
             var footageFoldersList = new List<string>();
             var i = 0;
 
-            foreach (var folder in Directory.EnumerateDirectories(@"C:\Users\Owner\Documents"))
+            foreach (var folder in Directory.EnumerateDirectories(sourceFolder))
             {
 
                 if (Path.GetFullPath(folder).Split('\\').Reverse().First().ToUpper().Contains("FOOTAGE ORIGINAL"))
@@ -370,6 +382,7 @@ namespace MediaSyncTestsConsoleApp1
        
             }
 
+            footageFoldersList.Add(sourceFolder);
             foreach (var v in footageFoldersList)
             {
                 var subOutputNum = 0;
