@@ -186,13 +186,11 @@ namespace MediaSyncTestsConsoleApp1
             var subOutputNum = 0;
             var outputList = new List<string>();
 
-            foreach (var subFolder in Directory.EnumerateDirectories(folder))
-            {
-                subOutputNum++;
+            
                 var triggers = new List<Trigger>();
                 var footageList = new Dictionary<string, IList<Footage>>();
 
-                foreach (var d in Directory.EnumerateDirectories(subFolder))
+                foreach (var d in Directory.EnumerateDirectories(folder))
                 {
                     Console.WriteLine(d);
                     if (d.Contains("iPhone"))
@@ -289,15 +287,12 @@ namespace MediaSyncTestsConsoleApp1
                 }
 
                 outputList = RunSplit(triggers, footageList, subOutputNum, outputList);
-                if (outputList.Count() > 1) { break; }
 
                 
 
-                var footageListFileName = Path.Combine(subFolder, $"footage{DateTime.Now.Ticks}.txt");
+                var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
                 //File.WriteAllText(footageListFileName, sb.ToString());
-            }
-            Combine(outputList, "output.mp4");
-
+            
         }
 
         public static List<string> RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList, int prefixOutput, List<string> outputs)
@@ -366,7 +361,7 @@ namespace MediaSyncTestsConsoleApp1
 
         static void Main(string[] args)
         {//
-            ProcessFolder(@"D:\Footage");
+            ProcessFolder(@"C:\Users\Owner\Documents\Footage original");
 
             //foreach (var folder in Directory.EnumerateDirectories(@"E:\Footage"))
             //{
