@@ -1,1 +1,25 @@
-"# triggersync" 
+Command line options
+- Folder
+- time before 
+- time after trigger
+
+Offset
+Make footage for cases
+
+|---------||---------|
+    |   ^     |
+
+
+|---------|
+    |   ^ |
+
+
+          |---------|
+        ^ |   |
+
+
+|---------||-|
+    |   ^    |
+
+
+   
