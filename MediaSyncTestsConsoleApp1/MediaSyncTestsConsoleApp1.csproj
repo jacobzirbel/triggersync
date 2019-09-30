@@ -40,10 +40,10 @@
       <HintPath>..\packages\Newtonsoft.Json.11.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="RandomWayfarer.Pictures, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RandomWayfarer.Pictures.2018.9.11.4\lib\net45\RandomWayfarer.Pictures.dll</HintPath>
+      <HintPath>..\packages\RandomWayfarer.Pictures.2019.9.22.1\lib\net45\RandomWayfarer.Pictures.dll</HintPath>
     </Reference>
     <Reference Include="RandomWayfarer.Pictures.Interface, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RandomWayfarer.Pictures.Interface.2018.9.11.4\lib\net45\RandomWayfarer.Pictures.Interface.dll</HintPath>
+      <HintPath>..\packages\RandomWayfarer.Pictures.Interface.2019.9.22.1\lib\net45\RandomWayfarer.Pictures.Interface.dll</HintPath>
     </Reference>
     <Reference Include="RandomWayfarer.ViewModels, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\RandomWayfarer.ViewModels.2018.2.17.7\lib\net45\RandomWayfarer.ViewModels.dll</HintPath>

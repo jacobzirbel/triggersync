@@ -15,6 +15,7 @@ namespace MediaSyncTestsConsoleApp1
         public DateTime CreateDate { get; set; }
         public double Duration { get; set; }
         public string FileName { get; set; }
+        // Offset
 
         public DateTime EndDate { get { return CreateDate.AddMilliseconds((int)(Duration * 1000)); } }
         public bool Within(DateTime dt)
@@ -108,16 +109,12 @@ namespace MediaSyncTestsConsoleApp1
         static void Combine(List<string> inputs, string outputFile)
         {
             var endStuff = $@" -filter_complex ""[0:v] [0:a] [1:v] [1:a] concat=n={inputs.Count().ToString()}:v = 1:a = 1[v][a]"" -map ""[v]"" -map ""[a]"" {outputFile} ";
-            var startStuff = "ffmpeg ";
+            var startStuff = "";
             foreach (var i in inputs)
             {
                 startStuff += "-i " + i + " ";
             }
             var a2 = startStuff + endStuff;
-
-
-            //SO CLOSE! a2 works when I manually run it on different folder w/ copied files. 
-            //prompt closes too fast to see error
 
             // TZ: I could put a breakpoint on the while and read the error.  
             // It was "Unable to find a suitable output format for 'ffmpeg'"
@@ -164,6 +161,9 @@ namespace MediaSyncTestsConsoleApp1
 
         static void Split(string inputFile, string start, string duration, string outputFile)
         {
+            //https://stackoverflow.com/questions/45004159/ffmpeg-ss-and-t-for-cutting-mp3
+
+            // -y command automatically overrides files
             var a2 = $@" -ss {start} -i ""{inputFile}"" -t {duration} -y ""{outputFile}""";
             var psi = new ProcessStartInfo(ffmpeg, a2)
             {
@@ -196,7 +196,7 @@ namespace MediaSyncTestsConsoleApp1
             foreach (var d in Directory.EnumerateDirectories(folder))
             {
                 Console.WriteLine(d);
-                if (d.Contains("iPhone"))
+                if (d.Contains("iPhone") || d.Contains("Android"))
                 {
                     // load triggers
                     foreach (var f in (new DirectoryInfo(d)).EnumerateFiles())
@@ -238,7 +238,7 @@ namespace MediaSyncTestsConsoleApp1
                     var footageSourceName = ff.Split('\\').Reverse().First();
                     footageList.Add(footageSourceName, footage);
                     // load footage files
-                    foreach (var f in (new DirectoryInfo(d)).EnumerateFiles())
+                    foreach (var f in (new DirectoryInfo(d)).EnumerateFiles("*.mp4"))
                     {
                         var v = GetInfo(f.FullName);
                         var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
@@ -261,6 +261,7 @@ namespace MediaSyncTestsConsoleApp1
                 }
             }
 
+            //what does this do? It looks like its making a list I should be using for RunSplit instead of redoing these foreach's
             foreach (var trig in triggers)
             {
                 foreach (var foot in footageList)
@@ -302,9 +303,10 @@ namespace MediaSyncTestsConsoleApp1
             var outputFile = "output";
             var outputNum = 0;
             var outputSuf = ".mp4";
-            TimeSpan duration = new TimeSpan(0, 1, 15);
-            TimeSpan offset = new TimeSpan(0, 0, -40);
-             
+            TimeSpan duration = new TimeSpan(0, 0, 10);
+            TimeSpan before = new TimeSpan(duration.Ticks / 2);
+            TimeSpan offset = new TimeSpan(0,0,-1);
+
 
             foreach (var t in triggers)
             {
@@ -312,13 +314,14 @@ namespace MediaSyncTestsConsoleApp1
                 {
                     foreach (var v in f.Value)
                     {
-                        if (v.Within(t.CreateDate))
+                        if (v.Within(t.CreateDate-offset))
                         {
+                            //different files have different data rates much smaller than originals
                             outputFile = "output";
                             outputFile = prefixOutput.ToString() + outputFile + outputNum.ToString() + outputSuf;
                             outputs.Add(outputFile);
                             inputVid = v.FileName;
-                            start = (t.CreateDate - (v.CreateDate - offset)).ToString();
+                            start = ((t.CreateDate - (v.CreateDate + offset))-before).ToString();
                             Split(inputVid, start, duration.ToString(), outputFile);
                             outputNum++;
                         }
@@ -360,32 +363,26 @@ namespace MediaSyncTestsConsoleApp1
         }
 
         static void Main(string[] args)
-        {//@"C:\Users\Owner\Documents"
-
-            var inList = new List<string> {
-                @"C:\repos\triggersync\MediaSyncTestsConsoleApp1\bin\Debug\1output0.mp4",
-                @"C:\repos\triggersync\MediaSyncTestsConsoleApp1\bin\Debug\1output0.mp4"
-            };
-            Combine(inList, @"C:\repos\triggersync\MediaSyncTestsConsoleApp1\bin\Debug\CombineOutput.mp4");
+        {
 
             string sourceFolder = args[0];
             var footageFoldersList = new List<string>();
             var i = 0;
+            var subOutputNum = 0;
 
-            foreach (var folder in Directory.EnumerateDirectories(sourceFolder))
-            {
+            //foreach (var folder in Directory.EnumerateDirectories(sourceFolder))
+            //{
 
-                if (Path.GetFullPath(folder).Split('\\').Reverse().First().ToUpper().Contains("FOOTAGE ORIGINAL"))
-                {
-                    footageFoldersList.Add(folder);
-                }
+            //    if (Path.GetFullPath(folder).Split('\\').Reverse().First().ToUpper().Contains("FOOTAGE ORIGINAL"))
+            //    {
+            //        footageFoldersList.Add(folder);
+            //    }
        
-            }
+            //}
 
             footageFoldersList.Add(sourceFolder);
             foreach (var v in footageFoldersList)
             {
-                var subOutputNum = 0;
                 var outputList = new List<string>();
                 ProcessFolder(v, subOutputNum, outputList);
             }
