@@ -8,9 +8,14 @@ using System.Text;
 using System.Threading.Tasks;
 
 
+//visual stuido is dumb
+//I'm typing this in master
+//I'm typing this in fuckery
+
+
 namespace MediaSyncTestsConsoleApp1
 {
-    public class Footage 
+    public class Footage
     {
         public DateTime CreateDate { get; set; }
         public double Duration { get; set; }
@@ -149,7 +154,7 @@ namespace MediaSyncTestsConsoleApp1
                 RedirectStandardError = false,
                 UseShellExecute = false
             };
-            
+
             var p = new Process { StartInfo = psi };
             p.Start();
 
@@ -305,7 +310,7 @@ namespace MediaSyncTestsConsoleApp1
             var outputSuf = ".mp4";
             TimeSpan duration = new TimeSpan(0, 0, 10);
             TimeSpan before = new TimeSpan(duration.Ticks / 2);
-            TimeSpan offset = new TimeSpan(0,0,-1);
+            TimeSpan offset = new TimeSpan(0, 0, -1);
 
 
             foreach (var t in triggers)
@@ -314,14 +319,14 @@ namespace MediaSyncTestsConsoleApp1
                 {
                     foreach (var v in f.Value)
                     {
-                        if (v.Within(t.CreateDate-offset))
+                        if (v.Within(t.CreateDate - offset))
                         {
                             //different files have different data rates much smaller than originals
                             outputFile = "output";
                             outputFile = prefixOutput.ToString() + outputFile + outputNum.ToString() + outputSuf;
                             outputs.Add(outputFile);
                             inputVid = v.FileName;
-                            start = ((t.CreateDate - (v.CreateDate + offset))-before).ToString();
+                            start = ((t.CreateDate - (v.CreateDate + offset)) - before).ToString();
                             Split(inputVid, start, duration.ToString(), outputFile);
                             outputNum++;
                         }
@@ -331,7 +336,7 @@ namespace MediaSyncTestsConsoleApp1
 
             return outputs;
 
-           
+
         }
 
         static Vids GetInfo(string inputFile)
@@ -377,7 +382,7 @@ namespace MediaSyncTestsConsoleApp1
             //    {
             //        footageFoldersList.Add(folder);
             //    }
-       
+
             //}
 
             footageFoldersList.Add(sourceFolder);
@@ -394,18 +399,18 @@ namespace MediaSyncTestsConsoleApp1
 
 
 
-            //foreach (var folder in Directory.EnumerateDirectories(@"E:\Footage"))
-            //{
-            //    ProcessFolder(folder);
-            //}
-            //ProcessFolder(@"E:\Footage\2018-09-10");
-            // ProcessFolder(@"E:\Footage\2018-09-06");
-            //ProcessFolder(@"C:\Users\tzerb\Documents\TestFootage\2018-09-08");
+//foreach (var folder in Directory.EnumerateDirectories(@"E:\Footage"))
+//{
+//    ProcessFolder(folder);
+//}
+//ProcessFolder(@"E:\Footage\2018-09-10");
+// ProcessFolder(@"E:\Footage\2018-09-06");
+//ProcessFolder(@"C:\Users\tzerb\Documents\TestFootage\2018-09-08");
 
-            //var outputFile = @"C:\Users\tzerb\Documents\TestFootage\Split.MP4";
-            //var finalFile = @"C:\Users\tzerb\Documents\TestFootage\Final.MP4";
-            //var inputFile = @"C:\Users\tzerb\Documents\TestFootage\2018-09-08\HERO5 Session 1\GOPR6628.MP4";
-            //File.Delete(outputFile);
-            //File.Delete(finalFile);
-            //Split(inputFile, 10, 25, outputFile);
-            //Combine(inputFile, outputFile, finalFile);
+//var outputFile = @"C:\Users\tzerb\Documents\TestFootage\Split.MP4";
+//var finalFile = @"C:\Users\tzerb\Documents\TestFootage\Final.MP4";
+//var inputFile = @"C:\Users\tzerb\Documents\TestFootage\2018-09-08\HERO5 Session 1\GOPR6628.MP4";
+//File.Delete(outputFile);
+//File.Delete(finalFile);
+//Split(inputFile, 10, 25, outputFile);
+//Combine(inputFile, outputFile, finalFile);
