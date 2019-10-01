@@ -10,7 +10,12 @@ using System.Threading.Tasks;
 
 namespace MediaSyncTestsConsoleApp1
 {
-    public class Footage 
+    public class Clip
+    {
+
+    }
+
+    public class Footage
     {
         public DateTime CreateDate { get; set; }
         public double Duration { get; set; }
@@ -29,6 +34,8 @@ namespace MediaSyncTestsConsoleApp1
     public class Trigger
     {
         public DateTime CreateDate { get; set; }
+        public DateTime ParamStart { get; set; }
+        public DateTime ParamEnd { get; set; }
         public string FileName { get; set; }
         public IDictionary<string, IList<Footage>> Footage { get; set; }
 
@@ -55,6 +62,13 @@ namespace MediaSyncTestsConsoleApp1
             }
             return false;
         }
+
+        public TimeSpan ClipDuration { get; set; }
+        public string ClipName { get; set; }
+        public DateTime ClipStart { get; set; }
+        public DateTime ClipEnd { get; set; }
+        public IList<Footage> NecessaryFiles { get; set; }
+
     }
 
 
@@ -149,7 +163,7 @@ namespace MediaSyncTestsConsoleApp1
                 RedirectStandardError = false,
                 UseShellExecute = false
             };
-            
+
             var p = new Process { StartInfo = psi };
             p.Start();
 
@@ -183,13 +197,12 @@ namespace MediaSyncTestsConsoleApp1
 
         }
 
-        static void ProcessFolder(string folder, int subOutputNum, List<string> outputList)
+        static void ProcessFolder(string folder, List<string> outputList)
         {
             // output each trigger and which footage files that contain it
             // output lists of footage folders in chronological order
             // output list of everything in chronological order
 
-            subOutputNum++;
             var triggers = new List<Trigger>();
             var footageList = new Dictionary<string, IList<Footage>>();
 
@@ -248,7 +261,8 @@ namespace MediaSyncTestsConsoleApp1
                             footage.Add(new Footage
                             {
                                 FileName = f.FullName,
-                                CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone
+                                //if gopro add 5 hours
+                                CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
                                 Duration = s.duration
                             });
                         }
@@ -261,17 +275,27 @@ namespace MediaSyncTestsConsoleApp1
                 }
             }
 
-            //what does this do? It looks like its making a list I should be using for RunSplit instead of redoing these foreach's
+
             foreach (var trig in triggers)
             {
+                trig.CreateDate += new TimeSpan(0, 0, 6);//because of android silliness works for "androidcase1" folder
+                trig.ParamStart = trig.CreateDate - new TimeSpan(0, 0, before);
+                trig.ParamEnd = trig.CreateDate + new TimeSpan(0, 0, after);
+
                 foreach (var foot in footageList)
                 {
                     foreach (var x in foot.Value)
                     {
+                        //what is this? should find all footage needed to create correct duration clip
+                        //checks if it should add footage, if it does, it adds to trig.Footage? which is a dictionary
+                        //
                         trig.CheckAddFootage(foot.Key, x);
+
                     }
                 }
             }
+
+
 
             var sb = new StringBuilder();
             foreach (var f in footageList.First().Value.OrderBy(ff => ff.CreateDate))
@@ -293,19 +317,21 @@ namespace MediaSyncTestsConsoleApp1
             var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
             //File.WriteAllText(footageListFileName, sb.ToString());
 
-            outputList = RunSplit(triggers, footageList, subOutputNum, outputList);
+            Console.WriteLine(footageList.First().Key);
+
+            outputList = RunSplit(triggers, footageList, outputList);
         }
 
-        public static List<string> RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList, int prefixOutput, List<string> outputs)
+        public static List<string> RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList, List<string> outputs)
         {
             var inputVid = "";
             var start = "";
             var outputFile = "output";
             var outputNum = 0;
             var outputSuf = ".mp4";
-            TimeSpan duration = new TimeSpan(0, 0, 10);
-            TimeSpan before = new TimeSpan(duration.Ticks / 2);
-            TimeSpan offset = new TimeSpan(0,0,-1);
+            TimeSpan duration = new TimeSpan(0, 0, before + after);
+            TimeSpan tsbefore = new TimeSpan(0, 0, before);
+            TimeSpan offset = new TimeSpan(0, 0, 0);
 
 
             foreach (var t in triggers)
@@ -314,15 +340,15 @@ namespace MediaSyncTestsConsoleApp1
                 {
                     foreach (var v in f.Value)
                     {
-                        if (v.Within(t.CreateDate-offset))
+                        if (v.Within(t.CreateDate - offset))
                         {
                             //different files have different data rates much smaller than originals
                             outputFile = "output";
-                            outputFile = prefixOutput.ToString() + outputFile + outputNum.ToString() + outputSuf;
+                            outputFile = outputFile + outputNum.ToString() + outputSuf;
                             outputs.Add(outputFile);
                             inputVid = v.FileName;
-                            start = ((t.CreateDate - (v.CreateDate + offset))-before).ToString();
-                            Split(inputVid, start, duration.ToString(), outputFile);
+                            start = ((t.CreateDate - (v.CreateDate + offset)) - tsbefore).ToString();
+                            //  Split(inputVid, start, duration.ToString(), outputFile);
                             outputNum++;
                         }
                     }
@@ -331,7 +357,7 @@ namespace MediaSyncTestsConsoleApp1
 
             return outputs;
 
-           
+
         }
 
         static Vids GetInfo(string inputFile)
@@ -361,30 +387,30 @@ namespace MediaSyncTestsConsoleApp1
                 return o;
             }
         }
+        static public int before { get; set; }
+        static public int after { get; set; }
 
         static void Main(string[] args)
         {
 
             string sourceFolder = args[0];
+            int b, a;
+
+            int.TryParse(args[1], out b);
+            before = b;
+            int.TryParse(args[2], out a);
+            after = a;
+
             var footageFoldersList = new List<string>();
-            var i = 0;
-            var subOutputNum = 0;
 
-            //foreach (var folder in Directory.EnumerateDirectories(sourceFolder))
-            //{
 
-            //    if (Path.GetFullPath(folder).Split('\\').Reverse().First().ToUpper().Contains("FOOTAGE ORIGINAL"))
-            //    {
-            //        footageFoldersList.Add(folder);
-            //    }
-       
-            //}
+
 
             footageFoldersList.Add(sourceFolder);
             foreach (var v in footageFoldersList)
             {
                 var outputList = new List<string>();
-                ProcessFolder(v, subOutputNum, outputList);
+                ProcessFolder(v, outputList);
             }
 
         }
@@ -393,19 +419,3 @@ namespace MediaSyncTestsConsoleApp1
 
 
 
-
-            //foreach (var folder in Directory.EnumerateDirectories(@"E:\Footage"))
-            //{
-            //    ProcessFolder(folder);
-            //}
-            //ProcessFolder(@"E:\Footage\2018-09-10");
-            // ProcessFolder(@"E:\Footage\2018-09-06");
-            //ProcessFolder(@"C:\Users\tzerb\Documents\TestFootage\2018-09-08");
-
-            //var outputFile = @"C:\Users\tzerb\Documents\TestFootage\Split.MP4";
-            //var finalFile = @"C:\Users\tzerb\Documents\TestFootage\Final.MP4";
-            //var inputFile = @"C:\Users\tzerb\Documents\TestFootage\2018-09-08\HERO5 Session 1\GOPR6628.MP4";
-            //File.Delete(outputFile);
-            //File.Delete(finalFile);
-            //Split(inputFile, 10, 25, outputFile);
-            //Combine(inputFile, outputFile, finalFile);
