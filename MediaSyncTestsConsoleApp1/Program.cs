@@ -10,9 +10,24 @@ using System.Threading.Tasks;
 
 namespace MediaSyncTestsConsoleApp1
 {
+
+    public class SplitParameters
+    {
+        public string InputFile { get; set; }
+        public TimeSpan Start { get; set; }
+        public string duration { get; set; }
+        public string OutputFile { get; set; }
+    }
+
     public class Clip
     {
-
+        public Trigger InitTrigger { get; set; }
+        public string OutputName { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        public int Duration { get; set; }
+        public List<Footage> NecessaryFiles { get; set; }
+        public SplitParameters SplitParameters { get; set; }
     }
 
     public class Footage
@@ -63,11 +78,6 @@ namespace MediaSyncTestsConsoleApp1
             return false;
         }
 
-        public TimeSpan ClipDuration { get; set; }
-        public string ClipName { get; set; }
-        public DateTime ClipStart { get; set; }
-        public DateTime ClipEnd { get; set; }
-        public IList<Footage> NecessaryFiles { get; set; }
 
     }
 
@@ -130,11 +140,6 @@ namespace MediaSyncTestsConsoleApp1
             }
             var a2 = startStuff + endStuff;
 
-            // TZ: I could put a breakpoint on the while and read the error.  
-            // It was "Unable to find a suitable output format for 'ffmpeg'"
-            // The process start info concatenates ffmpeg with a2.  
-            // The way it's written, when you run it in the program there are too many 'ffmpeg' calls. (ffmpeg.exe ffmpeg)
-
             var psi = new ProcessStartInfo(ffmpeg, a2)
             {
                 RedirectStandardInput = false,
@@ -173,8 +178,13 @@ namespace MediaSyncTestsConsoleApp1
             }
         }
 
-        static void Split(string inputFile, string start, string duration, string outputFile)
+        static void Split(SplitParameters pp)
         {
+            var start = pp.Start.ToString();
+            var inputFile = pp.InputFile;
+            var duration = pp.duration;
+            var outputFile = pp.OutputFile + ".mp4";
+
             //https://stackoverflow.com/questions/45004159/ffmpeg-ss-and-t-for-cutting-mp3
 
             // -y command automatically overrides files
@@ -194,6 +204,7 @@ namespace MediaSyncTestsConsoleApp1
             {
                 System.Threading.Thread.Sleep(100);
             }
+            
 
         }
 
@@ -205,6 +216,7 @@ namespace MediaSyncTestsConsoleApp1
 
             var triggers = new List<Trigger>();
             var footageList = new Dictionary<string, IList<Footage>>();
+            var clipList = new List<Clip>();
 
             foreach (var d in Directory.EnumerateDirectories(folder))
             {
@@ -258,13 +270,26 @@ namespace MediaSyncTestsConsoleApp1
                         if (s != null)
                         {
                             var cd = s.Tags["creation_time"];
-                            footage.Add(new Footage
+                            // question improve this
+                            if(f.FullName.Contains("GOPR"))
                             {
-                                FileName = f.FullName,
-                                //if gopro add 5 hours
-                                CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
-                                Duration = s.duration
-                            });
+                                footage.Add(new Footage
+                                {
+                                    FileName = f.FullName,
+                                    CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone //
+                                    Duration = s.duration
+                                });
+                            }
+                            else
+                            {
+                                footage.Add(new Footage
+                                {
+                                    FileName = f.FullName,
+                                    CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
+                                    Duration = s.duration
+                                });
+                            }
+                            
                         }
                         else
                         {
@@ -278,23 +303,65 @@ namespace MediaSyncTestsConsoleApp1
 
             foreach (var trig in triggers)
             {
-                trig.CreateDate += new TimeSpan(0, 0, 6);//because of android silliness works for "androidcase1" folder
+                
+                //trig.CreateDate += new TimeSpan(0, 0, 6);//because of android silliness. needed for "androidcase1" folder
                 trig.ParamStart = trig.CreateDate - new TimeSpan(0, 0, before);
                 trig.ParamEnd = trig.CreateDate + new TimeSpan(0, 0, after);
 
-                foreach (var foot in footageList)
+                foreach (var camera in footageList)
                 {
-                    foreach (var x in foot.Value)
+                    var clip = new Clip
                     {
-                        //what is this? should find all footage needed to create correct duration clip
-                        //checks if it should add footage, if it does, it adds to trig.Footage? which is a dictionary
-                        //
-                        trig.CheckAddFootage(foot.Key, x);
+                        InitTrigger = trig,
+                        OutputName = "output",
+                        StartTime = trig.ParamStart,
+                        EndTime = trig.ParamEnd,
+                        Duration = before + after,
+                        NecessaryFiles = new List<Footage>()
+                    }; 
 
+                    foreach (var file in camera.Value)
+                    {
+                       if(file.Within(clip.StartTime) || file.Within(clip.EndTime))
+                       {
+                            clip.NecessaryFiles.Add(file);
+                       }
+
+                    }
+                    clipList.Add(clip);
+                }
+
+            }
+
+            foreach(var clip in clipList)
+            {
+                clip.SplitParameters = new SplitParameters
+                {
+                    InputFile = clip.NecessaryFiles.First().FileName,
+                    Start = ((clip.InitTrigger.CreateDate - clip.NecessaryFiles.First().CreateDate) - tsBefore),
+                    duration = (before + after).ToString(),
+                    OutputFile = "output"
+                };
+                
+                if(clip.NecessaryFiles.Count == 1)
+                {
+                    //question can this be part of the class?
+                    if(clip.SplitParameters.Start < new TimeSpan(0))
+                    {
+                        clip.SplitParameters.Start = new TimeSpan(0);
+                    }
+                    
+                    Split(clip.SplitParameters);
+                }
+                else
+                {
+                    foreach(var file in clip.NecessaryFiles)
+                    {
+                       // var necessaryInputs = RunSplit(file)
+                       // Combine(necessaryInputs)
                     }
                 }
             }
-
 
 
             var sb = new StringBuilder();
@@ -317,9 +384,9 @@ namespace MediaSyncTestsConsoleApp1
             var footageListFileName = Path.Combine(folder, $"footage{DateTime.Now.Ticks}.txt");
             //File.WriteAllText(footageListFileName, sb.ToString());
 
-            Console.WriteLine(footageList.First().Key);
 
             outputList = RunSplit(triggers, footageList, outputList);
+
         }
 
         public static List<string> RunSplit(List<Trigger> triggers, Dictionary<string, IList<Footage>> footageList, List<string> outputs)
@@ -333,27 +400,29 @@ namespace MediaSyncTestsConsoleApp1
             TimeSpan tsbefore = new TimeSpan(0, 0, before);
             TimeSpan offset = new TimeSpan(0, 0, 0);
 
+           
 
-            foreach (var t in triggers)
-            {
-                foreach (var f in footageList)
-                {
-                    foreach (var v in f.Value)
-                    {
-                        if (v.Within(t.CreateDate - offset))
-                        {
-                            //different files have different data rates much smaller than originals
-                            outputFile = "output";
-                            outputFile = outputFile + outputNum.ToString() + outputSuf;
-                            outputs.Add(outputFile);
-                            inputVid = v.FileName;
-                            start = ((t.CreateDate - (v.CreateDate + offset)) - tsbefore).ToString();
-                            //  Split(inputVid, start, duration.ToString(), outputFile);
-                            outputNum++;
-                        }
-                    }
-                }
-            }
+
+            //foreach (var t in triggers)
+            //{
+            //    foreach (var f in footageList)
+            //    {
+            //        foreach (var v in f.Value)
+            //        {
+            //            if (v.Within(t.CreateDate - offset))
+            //            {
+            //                //different files have different data rates much smaller than originals
+            //                outputFile = "output";
+            //                outputFile = outputFile + outputNum.ToString() + outputSuf;
+            //                outputs.Add(outputFile);
+            //                inputVid = v.FileName;
+            //                start = ((t.CreateDate - (v.CreateDate + offset)) - tsbefore).ToString();
+            //                Split(inputVid, start, duration.ToString(), outputFile);
+            //                outputNum++;
+            //            }
+            //        }
+            //    }
+            //}
 
             return outputs;
 
@@ -389,6 +458,7 @@ namespace MediaSyncTestsConsoleApp1
         }
         static public int before { get; set; }
         static public int after { get; set; }
+        static public TimeSpan tsBefore { get; set; }
 
         static void Main(string[] args)
         {
