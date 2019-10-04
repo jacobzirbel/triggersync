@@ -13,9 +13,33 @@ namespace MediaSyncTestsConsoleApp1
 
     public class SplitParameters
     {
+        private TimeSpan start;
+        public SplitParameters(string inputFile, TimeSpan start, TimeSpan duration, string outputFile)
+        {
+            this.InputFile = inputFile;
+            this.start = start;
+            this.Duration = duration;
+            this.OutputFile = outputFile;
+        }
         public string InputFile { get; set; }
-        public TimeSpan Start { get; set; }
-        
+        public TimeSpan Start
+        {
+            get
+            {
+                if (this.start < new TimeSpan(0))
+                {
+                    return new TimeSpan(0);
+                }
+                else
+                {
+                    return this.start;
+                }
+            }
+            set
+            {
+                this.start = value;
+            }
+        }
         public TimeSpan Duration { get; set; }
         public string OutputFile { get; set; }
     }
@@ -28,6 +52,13 @@ namespace MediaSyncTestsConsoleApp1
         public DateTime EndTime { get; set; }
         public List<Footage> NecessaryFiles { get; set; }
         public SplitParameters SplitParameters { get; set; }
+        public bool Within(DateTime dt)
+        {
+            if (dt < StartTime) return false;
+            if (dt > EndTime) return false;
+            return true;
+        }
+
     }
 
     public class Footage
@@ -79,10 +110,7 @@ namespace MediaSyncTestsConsoleApp1
             }
             return false;
         }
-
-
     }
-
 
     public class VidsStream
     {
@@ -161,7 +189,7 @@ namespace MediaSyncTestsConsoleApp1
 
         static void Combine(string firstFile, string secondFile, string outputFile)
         {
-            //JZ get full path for files question
+            //JZ get full path for files
             // https://stackoverflow.com/questions/7333232/how-to-concatenate-two-mp4-files-using-ffmpeg
             var a2 = $@" -i ""{firstFile}"" -i ""{secondFile}"" -filter_complex ""[0:v] [0:a] [1:v] [1:a] concat=n=2:v=1:a=1 [v] [a]"" -map ""[v]"" -map ""[a]"" ""{outputFile}""";
             var psi = new ProcessStartInfo(ffmpeg, a2)
@@ -183,14 +211,7 @@ namespace MediaSyncTestsConsoleApp1
 
         static string Split(SplitParameters pp)
         {
-            
             var start = pp.Start.ToString();
-
-            //workaround
-            if (pp.Start < new TimeSpan(0))
-            {
-                start = new TimeSpan(0).ToString();
-            }
             var inputFile = pp.InputFile;
             var duration = pp.Duration.ToString();
             var outputFile = pp.OutputFile + ".mp4";
@@ -218,7 +239,7 @@ namespace MediaSyncTestsConsoleApp1
             return outputFile;
         }
 
-        static void ProcessFolder(string folder, List<string> outputList)
+        static void ProcessFolder(string folder)
         {
             // output each trigger and which footage files that contain it
             // output lists of footage folders in chronological order
@@ -281,7 +302,11 @@ namespace MediaSyncTestsConsoleApp1
                         if (s != null)
                         {
                             var cd = s.Tags["creation_time"];
-                            // question improve this
+                            //
+                            //
+                            // Need to deal with this timezone thing
+                            //
+                            //
                             if((f.FullName.Contains("GoPr") || f.FullName.Contains("HERO") || f.FullName.Contains("GOP")) && !f.FullName.Contains("pixel"))
                             {
                                 footage.Add(new Footage
@@ -311,14 +336,9 @@ namespace MediaSyncTestsConsoleApp1
                 }
             }
 
-            //each camera for a single trigger makes a "clip" clips can be made of multiple files
+            //each camera for a single trigger makes a "clip." clips can be made of multiple vids
             foreach (var trig in triggers)
-            {
-                if(trig.FileName.Contains("Android"))
-                {
-                    trig.CreateDate += new TimeSpan(0, 0, 6);//because of android silliness. needed for "androidcase1" folder
-                }
-                
+            {          
                 trig.ParamStart = trig.CreateDate - new TimeSpan(0, 0, before);
                 trig.ParamEnd = trig.CreateDate + new TimeSpan(0, 0, after);
 
@@ -333,21 +353,23 @@ namespace MediaSyncTestsConsoleApp1
                         NecessaryFiles = new List<Footage>()
                     }; 
 
-                    //need bool Overlap method or something
                     foreach (var file in camera.Value)
                     {
                        if(file.Within(clip.StartTime) || file.Within(clip.EndTime))
                        {
                             clip.NecessaryFiles.Add(file);
                        }
-                       else if(file.EndDate>trig.CreateDate && file.EndDate < clip.EndTime)
-                        {
-                            //this is cheating
+                       else if(clip.Within(file.CreateDate))
+                       {
                             clip.NecessaryFiles.Add(file);
-                        }
+                       }
 
                     }
-                    clipList.Add(clip);
+                    if (clip.NecessaryFiles.Count > 0)
+                    {
+                        clipList.Add(clip);
+                    }
+                    
                 }
 
             }
@@ -357,36 +379,32 @@ namespace MediaSyncTestsConsoleApp1
             foreach(var clip in clipList)
             {
                 clipNum++;
-                clip.SplitParameters = new SplitParameters
-                {
-                    InputFile = clip.NecessaryFiles.FirstOrDefault().FileName,
-                    Start = ((clip.InitTrigger.CreateDate - clip.NecessaryFiles.FirstOrDefault().CreateDate) - tsBefore),
-                    Duration = tsBefore + tsAfter,
-                    OutputFile = "output" + clipNum.ToString()
-                };
+                clip.SplitParameters = new SplitParameters(
+                                                clip.NecessaryFiles.FirstOrDefault().FileName,
+                                                ((clip.InitTrigger.CreateDate - clip.NecessaryFiles.FirstOrDefault().CreateDate) - tsBefore),
+                                                tsBefore + tsAfter,
+                                                "output" + clipNum.ToString());
+               
                 
                 if(clip.NecessaryFiles.Count == 1)
                 {
-                    ////question can this be part of the class?
-                    //if(clip.SplitParameters.Start < new TimeSpan(0))
-                    //{
-                    //    clip.SplitParameters.Start = new TimeSpan(0);
-                    //}
-                    
                     Split(clip.SplitParameters);
+                }
+                else if(clip.NecessaryFiles.Count == 0)
+                {
+                    //delete clip
                 }
                 else
                 {
                     foreach(var file in clip.NecessaryFiles)
                     {
-                        file.SplitParameters = new SplitParameters
-                        {
-                            InputFile = file.FileName,
-                            Start = ((clip.InitTrigger.CreateDate - file.CreateDate) - tsBefore),
-                            Duration = tsBefore + tsAfter,
-                            OutputFile = Path.GetFileName(file.FileName.TrimEnd(Path.DirectorySeparatorChar)) + "output"
-                        };
-
+                        file.SplitParameters = new SplitParameters(
+                            file.FileName,
+                           ((clip.InitTrigger.CreateDate - file.CreateDate) - tsBefore),
+                            tsBefore + tsAfter,
+                            Path.GetFileName(file.FileName.TrimEnd(Path.DirectorySeparatorChar)) + "output"
+                            );
+                       
                         if (file.Within(clip.InitTrigger.ParamStart))
                         {
                             file.SplitParameters.Duration = file.EndDate - clip.InitTrigger.ParamStart;
@@ -477,14 +495,19 @@ namespace MediaSyncTestsConsoleApp1
 
             var footageFoldersList = new List<string>();
 
+            foreach (var d in Directory.EnumerateDirectories(sourceFolder))
+            {
+                if (d.Contains("current"))
+                {
+                    footageFoldersList.Add(d);
+                }
+            }
 
 
-
-            footageFoldersList.Add(sourceFolder);
+            
             foreach (var v in footageFoldersList)
             {
-                var outputList = new List<string>();
-                ProcessFolder(v, outputList);
+                ProcessFolder(v);
             }
 
         }
