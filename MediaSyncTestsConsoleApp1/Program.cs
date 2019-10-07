@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-//comment
 
 namespace MediaSyncTestsConsoleApp1
 {
@@ -74,6 +73,69 @@ namespace MediaSyncTestsConsoleApp1
             if (dt < CreateDate) return false;
             if (dt > EndDate) return false;
             return true;
+        }
+        static public Footage Factory(FileInfo path)
+        {
+            switch (path.Extension.ToUpper())
+            {
+                case ".MP4":
+                    {
+                        Footage footage = null;
+                        var v = Program.GetInfo(path.FullName);
+                        var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
+                        if (s != null)
+                        {
+                            var cd = s.Tags["creation_time"];
+
+                            if ((path.FullName.Contains("GoPr") || path.FullName.Contains("HERO") || path.FullName.Contains("GOP")) && !path.FullName.Contains("pixel"))
+                            {
+                                footage = new Footage
+                                {
+                                    FileName = path.FullName,
+                                    CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone //
+                                    Duration = s.duration
+                                };
+                            }
+                            else
+                            {
+                                footage = new Footage
+                                {
+                                    FileName = path.FullName,
+                                    CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
+                                    Duration = s.duration
+                                };
+                            }
+                            
+                        }
+                        return footage;
+                    }
+                        
+                case ".AVI":
+                    {
+                        Footage footage = null;
+                        var v = Program.GetInfo(path.FullName);
+                        var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
+                        if (s != null)
+                        {
+                            var cd = path.LastWriteTime;
+
+
+                            footage = new Footage
+                            {
+                                FileName = path.FullName,
+                                CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
+                                Duration = s.duration
+
+                            };
+
+                        }
+                        return footage;
+                    }
+                default: return null;
+                    
+            }
+
+            
         }
 
         public SplitParameters SplitParameters { get; set; }
@@ -295,42 +357,21 @@ namespace MediaSyncTestsConsoleApp1
                     var footageSourceName = ff.Split('\\').Reverse().First();
                     footageList.Add(footageSourceName, footage);
                     // load footage files
-                    foreach (var f in (new DirectoryInfo(d)).EnumerateFiles("*.mp4"))
+                    foreach (var ext in new string[] { "*.mp4", "*.avi", "*.mov" })
                     {
-                        var v = GetInfo(f.FullName);
-                        var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
-                        if (s != null)
+                        foreach (var f in (new DirectoryInfo(d)).EnumerateFiles(ext))//.mp4
                         {
-                            var cd = s.Tags["creation_time"];
-                            //
-                            //
-                            // Need to deal with this timezone thing
-                            //
-                            //
-                            if((f.FullName.Contains("GoPr") || f.FullName.Contains("HERO") || f.FullName.Contains("GOP")) && !f.FullName.Contains("pixel"))
+
+                            var foot = Footage.Factory(f);
+                            if (foot != null)
                             {
-                                footage.Add(new Footage
-                                {
-                                    FileName = f.FullName,
-                                    CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone //
-                                    Duration = s.duration
-                                });
+                                footage.Add(foot);
                             }
                             else
                             {
-                                footage.Add(new Footage
-                                {
-                                    FileName = f.FullName,
-                                    CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
-                                    Duration = s.duration
-                                });
-                            }
-                            
-                        }
-                        else
-                        {
-                            Console.WriteLine($"INVALID : {f.FullName}");
+                                Console.WriteLine($"INVALID : {f.FullName}");
 
+                            }
                         }
                     }
                 }
@@ -355,6 +396,8 @@ namespace MediaSyncTestsConsoleApp1
 
                     foreach (var file in camera.Value)
                     {
+                        Console.WriteLine(file);
+
                        if(file.Within(clip.StartTime) || file.Within(clip.EndTime))
                        {
                             clip.NecessaryFiles.Add(file);
@@ -447,8 +490,35 @@ namespace MediaSyncTestsConsoleApp1
 
         }
 
+        static Vids GetAviInfo(string inputFile)
+        {
+            string a = $@" -v quiet ""{inputFile}"" -print_format json -show_entries stream=index,codec_type,duration:stream_tags=creation_time:format_tags=creation_time";
+            var psi = new ProcessStartInfo(ffprobe, a)
+            {
+                RedirectStandardInput = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
 
-        static Vids GetInfo(string inputFile)
+            var p = new Process { StartInfo = psi };
+            p.Start();
+
+            while (!p.HasExited)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+
+            var serializer = new JsonSerializer();
+
+            using (var jsonTextReader = new JsonTextReader(p.StandardOutput))
+            {
+                var o = serializer.Deserialize<Vids>(jsonTextReader);
+                return o;
+            }
+        }
+
+        static public Vids GetInfo(string inputFile)
         {
             string a = $@" -v quiet ""{inputFile}"" -print_format json -show_entries stream=index,codec_type,duration:stream_tags=creation_time:format_tags=creation_time";
             var psi = new ProcessStartInfo(ffprobe, a)
