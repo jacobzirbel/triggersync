@@ -87,12 +87,12 @@ namespace MediaSyncTestsConsoleApp1
                         {
                             var cd = s.Tags["creation_time"];
 
-                            if ((path.FullName.Contains("GoPr") || path.FullName.Contains("HERO") || path.FullName.Contains("GOP")) && !path.FullName.Contains("pixel"))
+                            if (path.FullName.Contains("pixel"))
                             {
                                 footage = new Footage
                                 {
                                     FileName = path.FullName,
-                                    CreateDate = Convert.ToDateTime(cd).AddHours(5), // TODO TZ : I punted on timezone //
+                                    CreateDate = Convert.ToDateTime(cd), 
                                     Duration = s.duration
                                 };
                             }
@@ -101,7 +101,7 @@ namespace MediaSyncTestsConsoleApp1
                                 footage = new Footage
                                 {
                                     FileName = path.FullName,
-                                    CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
+                                    CreateDate = Convert.ToDateTime(cd).AddHours(5), // gopro always returns UTC //
                                     Duration = s.duration
                                 };
                             }
@@ -277,6 +277,7 @@ namespace MediaSyncTestsConsoleApp1
             var inputFile = pp.InputFile;
             var duration = pp.Duration.ToString();
             var outputFile = pp.OutputFile + ".mp4";
+            //picturename/cameraname/number
 
             //https://stackoverflow.com/questions/45004159/ffmpeg-ss-and-t-for-cutting-mp3
 
