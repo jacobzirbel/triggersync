@@ -46,6 +46,7 @@ namespace MediaSyncTestsConsoleApp1
     public class Clip
     {
         public Trigger InitTrigger { get; set; }
+        public string CameraName { get; set; }
         public string OutputName { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
@@ -113,9 +114,9 @@ namespace MediaSyncTestsConsoleApp1
                 case ".AVI":
                     {
                         Footage footage = null;
-                        var v = Program.GetInfo(path.FullName);
-                        var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
-                        if (s != null)
+                        var v = Program.GetAviInfo(path.FullName);
+                        //var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
+                        if (v != null)
                         {
                             var cd = path.LastWriteTime;
 
@@ -123,8 +124,8 @@ namespace MediaSyncTestsConsoleApp1
                             footage = new Footage
                             {
                                 FileName = path.FullName,
-                                CreateDate = Convert.ToDateTime(cd).AddHours(0), // TODO TZ : I punted on timezone //
-                                Duration = s.duration
+                                CreateDate = Convert.ToDateTime(cd),
+                                Duration  = v 
 
                             };
 
@@ -222,9 +223,38 @@ namespace MediaSyncTestsConsoleApp1
         const string ffmpeg = ffmpegLocation + @"\ffmpeg.exe";
         const string ffprobe = ffmpegLocation + @"\ffprobe.exe";
 
-        static void Combine(List<string> inputs, string outputFile)
+        static void AddImage(string endOutput, string image)
         {
-            var endStuff = $@" -filter_complex ""[0:v] [0:a] [1:v] [1:a] concat=n={inputs.Count().ToString()}:v = 1:a = 1[v][a]"" -map ""[v]"" -map ""[a]"" {outputFile} ";
+            var a2 = $@"-loop 1 -i {image} -pix_fmt yuv420p -t 2 -vf scale=1920:1080 -vf transpose=1 ""picture.mp4""";
+
+            var psi = new ProcessStartInfo(ffmpeg, a2)
+            {
+                RedirectStandardInput = false,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                UseShellExecute = false
+            };
+
+            var p = new Process { StartInfo = psi };
+            p.Start();
+
+            while (!p.HasExited)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+
+            var inputList = new List<string>();
+            inputList.Add(endOutput);
+            inputList.Add("picture.mp4");
+
+            Combine(inputList, "outputwithimage.mp4");
+
+        }
+
+        static string Combine(List<string> inputs, string outputFile)
+        {
+            outputFile = outputFile.Replace(" ", string.Empty);
+            var endStuff = $@" -filter_complex ""[0:v] [0:a] [1:v] [1:a] concat=n={inputs.Count().ToString()}:v = 1:a = 1[v][a]"" -map ""[v]"" -map ""[a]"" {outputFile}.mp4 ";
             var startStuff = "";
             foreach (var i in inputs)
             {
@@ -247,11 +277,15 @@ namespace MediaSyncTestsConsoleApp1
             {
                 System.Threading.Thread.Sleep(100);
             }
+
+            return outputFile;
         }
 
-        static void Combine(string firstFile, string secondFile, string outputFile)
+        static string Combine(string firstFile, string secondFile, string outputFile)
         {
             //JZ get full path for files
+            //add photo for 5 seconds
+
             // https://stackoverflow.com/questions/7333232/how-to-concatenate-two-mp4-files-using-ffmpeg
             var a2 = $@" -i ""{firstFile}"" -i ""{secondFile}"" -filter_complex ""[0:v] [0:a] [1:v] [1:a] concat=n=2:v=1:a=1 [v] [a]"" -map ""[v]"" -map ""[a]"" ""{outputFile}""";
             var psi = new ProcessStartInfo(ffmpeg, a2)
@@ -269,6 +303,8 @@ namespace MediaSyncTestsConsoleApp1
             {
                 System.Threading.Thread.Sleep(100);
             }
+
+            return outputFile;
         }
 
         static string Split(SplitParameters pp)
@@ -276,7 +312,7 @@ namespace MediaSyncTestsConsoleApp1
             var start = pp.Start.ToString();
             var inputFile = pp.InputFile;
             var duration = pp.Duration.ToString();
-            var outputFile = pp.OutputFile + ".mp4";
+            var outputFile = (pp.OutputFile + ".mp4").Replace(" ", String.Empty);
             //picturename/cameraname/number
 
             //https://stackoverflow.com/questions/45004159/ffmpeg-ss-and-t-for-cutting-mp3
@@ -389,23 +425,22 @@ namespace MediaSyncTestsConsoleApp1
                     var clip = new Clip
                     {
                         InitTrigger = trig,
+                        CameraName = camera.Key,
                         OutputName = "output",
                         StartTime = trig.ParamStart,
                         EndTime = trig.ParamEnd,
                         NecessaryFiles = new List<Footage>()
                     }; 
 
-                    foreach (var file in camera.Value)
+                    foreach (var vid in camera.Value)
                     {
-                        Console.WriteLine(file);
-
-                       if(file.Within(clip.StartTime) || file.Within(clip.EndTime))
+                       if(vid.Within(clip.StartTime) || vid.Within(clip.EndTime))
                        {
-                            clip.NecessaryFiles.Add(file);
+                            clip.NecessaryFiles.Add(vid);
                        }
-                       else if(clip.Within(file.CreateDate))
+                       else if(clip.Within(vid.CreateDate))
                        {
-                            clip.NecessaryFiles.Add(file);
+                            clip.NecessaryFiles.Add(vid);
                        }
 
                     }
@@ -418,21 +453,24 @@ namespace MediaSyncTestsConsoleApp1
 
             }
 
-            //makes each clip from source footage, 2 files if necessary, doesn't work with 3+
+            //makes each clip from source footage, 2 files if necessary, might work with 3+, does it need to?
             var clipNum = 0;
             foreach(var clip in clipList)
             {
+                string endOutput = "";
                 clipNum++;
                 clip.SplitParameters = new SplitParameters(
                                                 clip.NecessaryFiles.FirstOrDefault().FileName,
                                                 ((clip.InitTrigger.CreateDate - clip.NecessaryFiles.FirstOrDefault().CreateDate) - tsBefore),
                                                 tsBefore + tsAfter,
-                                                "output" + clipNum.ToString());
-               
+                                                $"( {clipNum.ToString()} )" + clip.InitTrigger.FileName.Split('_').Last().Split('.').First() + clip.CameraName
+                                                
+                                                );
+                                            //OUTPUT NAME: (num),triggername,cameraname
                 
                 if(clip.NecessaryFiles.Count == 1)
                 {
-                    Split(clip.SplitParameters);
+                    endOutput = Split(clip.SplitParameters);
                 }
                 else if(clip.NecessaryFiles.Count == 0)
                 {
@@ -440,14 +478,17 @@ namespace MediaSyncTestsConsoleApp1
                 }
                 else
                 {
+                    int fileNum = 0;
                     foreach(var file in clip.NecessaryFiles)
                     {
+                        fileNum++;
                         file.SplitParameters = new SplitParameters(
-                            file.FileName,
-                           ((clip.InitTrigger.CreateDate - file.CreateDate) - tsBefore),
-                            tsBefore + tsAfter,
-                            Path.GetFileName(file.FileName.TrimEnd(Path.DirectorySeparatorChar)) + "output"
-                            );
+                                                                    file.FileName,
+                                                                    ((clip.InitTrigger.CreateDate - file.CreateDate) - tsBefore),
+                                                                    tsBefore + tsAfter,
+                                                                    $"( {fileNum.ToString()} )" + Path.GetFileName(file.FileName.TrimEnd(Path.DirectorySeparatorChar)).Split('.').First()
+                                                                    );
+                                                                    //OUTPUT NAME: vid file + output
                        
                         if (file.Within(clip.InitTrigger.ParamStart))
                         {
@@ -462,9 +503,11 @@ namespace MediaSyncTestsConsoleApp1
 
                         combineComps.Add(Split(file.SplitParameters));
                     }
-
-                    Combine(combineComps, "combinedoutput.mp4");
+                    var output = clip.InitTrigger.FileName.Split('_').Last().Split('.').First() + clip.CameraName;
+                    //OUTPUT NAME: triggername,cameraname
+                    endOutput = Combine(combineComps, output);
                 }
+                AddImage(endOutput, clip.InitTrigger.FileName);
             }
 
 
@@ -491,9 +534,10 @@ namespace MediaSyncTestsConsoleApp1
 
         }
 
-        static Vids GetAviInfo(string inputFile)
+        static public double GetAviInfo(string inputFile)
         {
-            string a = $@" -v quiet ""{inputFile}"" -print_format json -show_entries stream=index,codec_type,duration:stream_tags=creation_time:format_tags=creation_time";
+            string a = $@" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ""{inputFile}""";
+
             var psi = new ProcessStartInfo(ffprobe, a)
             {
                 RedirectStandardInput = false,
@@ -514,7 +558,7 @@ namespace MediaSyncTestsConsoleApp1
 
             using (var jsonTextReader = new JsonTextReader(p.StandardOutput))
             {
-                var o = serializer.Deserialize<Vids>(jsonTextReader);
+                var o = serializer.Deserialize<double>(jsonTextReader);
                 return o;
             }
         }
