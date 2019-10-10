@@ -124,7 +124,7 @@ namespace MediaSyncTestsConsoleApp1
                         Footage footage = null;
                         var v = Program.GetAviDuration(path.FullName);
                         //var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
-                        if (v != null)
+                        if (v > 0)
                         {
                             var cd = path.LastWriteTime;
 
@@ -509,7 +509,7 @@ namespace MediaSyncTestsConsoleApp1
                     //OUTPUT NAME: triggername,cameraname
                     endOutput = Combine(combineComps, output);
                 }
-                AddImage(endOutput, clip.InitTrigger.FileName);
+                MakeImageVid(clip.InitTrigger.FileName);
             }
 
 
