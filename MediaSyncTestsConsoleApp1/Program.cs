@@ -52,7 +52,7 @@ namespace MediaSyncTestsConsoleApp1
         public DateTime EndTime { get; set; }
         public List<Footage> NecessaryFiles { get; set; }
         public SplitParameters SplitParameters { get; set; }
-        public bool Within(DateTime dt)
+        public bool Contains(DateTime dt)
         {
             if (dt < StartTime) return false;
             if (dt > EndTime) return false;
@@ -69,12 +69,20 @@ namespace MediaSyncTestsConsoleApp1
         // Offset
 
         public DateTime EndDate { get { return CreateDate.AddMilliseconds((int)(Duration * 1000)); } }
-        public bool Within(DateTime dt)
+        public bool Contains(DateTime dt)
         {
             if (dt < CreateDate) return false;
             if (dt > EndDate) return false;
             return true;
         }
+        public string OutputPrefix
+        {
+            get
+            {
+                return Path.GetFileName(FileName.TrimEnd(Path.DirectorySeparatorChar)).Split('.').First();
+            }
+        }
+        
         static public Footage Factory(FileInfo path)
         {
             switch (path.Extension.ToUpper())
@@ -114,7 +122,7 @@ namespace MediaSyncTestsConsoleApp1
                 case ".AVI":
                     {
                         Footage footage = null;
-                        var v = Program.GetAviInfo(path.FullName);
+                        var v = Program.GetAviDuration(path.FullName);
                         //var s = v.streams?.Where(vv => vv.codec_type == "video").FirstOrDefault();
                         if (v != null)
                         {
@@ -149,6 +157,14 @@ namespace MediaSyncTestsConsoleApp1
         public DateTime ParamEnd { get; set; }
         public string FileName { get; set; }
         public IDictionary<string, IList<Footage>> Footage { get; set; }
+        public string OutputPrefix
+        {
+            get
+            {
+               return FileName.Split('_').Last().Split('.').First();
+            }
+
+        }
 
         public Trigger()
         {
@@ -166,7 +182,7 @@ namespace MediaSyncTestsConsoleApp1
 
         public bool CheckAddFootage(string footageSource, Footage footage)
         {
-            if (footage.Within(CreateDate))
+            if (footage.Contains(CreateDate))
             {
                 AddFootage(footageSource, footage);
                 return true;
@@ -183,14 +199,8 @@ namespace MediaSyncTestsConsoleApp1
         public Dictionary<string, string> Tags { get; set; }
     }
 
-    public class VidsProgram
-    {
-
-    }
-
     public class Vids
     {
-        public IEnumerable<VidsProgram> programs { get; set; }
         public IEnumerable<VidsStream> streams { get; set; }
     }
 
@@ -223,7 +233,7 @@ namespace MediaSyncTestsConsoleApp1
         const string ffmpeg = ffmpegLocation + @"\ffmpeg.exe";
         const string ffprobe = ffmpegLocation + @"\ffprobe.exe";
 
-        static void AddImage(string endOutput, string image)
+        static void MakeImageVid(string image)
         {
             var a2 = $@"-loop 1 -i {image} -pix_fmt yuv420p -t 2 -vf scale=1920:1080 -vf transpose=1 ""picture.mp4""";
 
@@ -242,12 +252,6 @@ namespace MediaSyncTestsConsoleApp1
             {
                 System.Threading.Thread.Sleep(100);
             }
-
-            var inputList = new List<string>();
-            inputList.Add(endOutput);
-            inputList.Add("picture.mp4");
-
-            Combine(inputList, "outputwithimage.mp4");
 
         }
 
@@ -434,11 +438,11 @@ namespace MediaSyncTestsConsoleApp1
 
                     foreach (var vid in camera.Value)
                     {
-                       if(vid.Within(clip.StartTime) || vid.Within(clip.EndTime))
+                       if(vid.Contains(clip.StartTime) || vid.Contains(clip.EndTime))
                        {
                             clip.NecessaryFiles.Add(vid);
                        }
-                       else if(clip.Within(vid.CreateDate))
+                       else if(clip.Contains(vid.CreateDate))
                        {
                             clip.NecessaryFiles.Add(vid);
                        }
@@ -463,10 +467,9 @@ namespace MediaSyncTestsConsoleApp1
                                                 clip.NecessaryFiles.FirstOrDefault().FileName,
                                                 ((clip.InitTrigger.CreateDate - clip.NecessaryFiles.FirstOrDefault().CreateDate) - tsBefore),
                                                 tsBefore + tsAfter,
-                                                $"( {clipNum.ToString()} )" + clip.InitTrigger.FileName.Split('_').Last().Split('.').First() + clip.CameraName
-                                                
+                                                $"( {clipNum.ToString()} )" + clip.InitTrigger.OutputPrefix + clip.CameraName 
                                                 );
-                                            //OUTPUT NAME: (num),triggername,cameraname
+
                 
                 if(clip.NecessaryFiles.Count == 1)
                 {
@@ -479,31 +482,30 @@ namespace MediaSyncTestsConsoleApp1
                 else
                 {
                     int fileNum = 0;
-                    foreach(var file in clip.NecessaryFiles)
+                    foreach(var vid in clip.NecessaryFiles)
                     {
                         fileNum++;
-                        file.SplitParameters = new SplitParameters(
-                                                                    file.FileName,
-                                                                    ((clip.InitTrigger.CreateDate - file.CreateDate) - tsBefore),
+                        vid.SplitParameters = new SplitParameters(
+                                                                    vid.FileName,
+                                                                    ((clip.InitTrigger.CreateDate - vid.CreateDate) - tsBefore),
                                                                     tsBefore + tsAfter,
-                                                                    $"( {fileNum.ToString()} )" + Path.GetFileName(file.FileName.TrimEnd(Path.DirectorySeparatorChar)).Split('.').First()
+                                                                    $"( {fileNum.ToString()} )" + vid.OutputPrefix
                                                                     );
-                                                                    //OUTPUT NAME: vid file + output
                        
-                        if (file.Within(clip.InitTrigger.ParamStart))
+                        if (vid.Contains(clip.InitTrigger.ParamStart))
                         {
-                            file.SplitParameters.Duration = file.EndDate - clip.InitTrigger.ParamStart;
+                            vid.SplitParameters.Duration = vid.EndDate - clip.InitTrigger.ParamStart;
                         }
-                        if(file.Within(clip.InitTrigger.ParamEnd))
+                        if(vid.Contains(clip.InitTrigger.ParamEnd))
                         {
-                            if (file.Within(clip.InitTrigger.ParamStart)) { /*error I don't think this should happen */ Console.WriteLine("fix error"); break; }
-                            file.SplitParameters.Start = new TimeSpan(0);
-                            file.SplitParameters.Duration = clip.InitTrigger.ParamEnd - file.CreateDate;
+                            if (vid.Contains(clip.InitTrigger.ParamStart)) { /*error I don't think this should happen */ Console.WriteLine("fix error"); break; }
+                            vid.SplitParameters.Start = new TimeSpan(0);
+                            vid.SplitParameters.Duration = clip.InitTrigger.ParamEnd - vid.CreateDate;
                         }
 
-                        combineComps.Add(Split(file.SplitParameters));
+                        combineComps.Add(Split(vid.SplitParameters));
                     }
-                    var output = clip.InitTrigger.FileName.Split('_').Last().Split('.').First() + clip.CameraName;
+                    var output = clip.InitTrigger.OutputPrefix + clip.CameraName;
                     //OUTPUT NAME: triggername,cameraname
                     endOutput = Combine(combineComps, output);
                 }
@@ -534,7 +536,7 @@ namespace MediaSyncTestsConsoleApp1
 
         }
 
-        static public double GetAviInfo(string inputFile)
+        static public double GetAviDuration(string inputFile)
         {
             string a = $@" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ""{inputFile}""";
 
