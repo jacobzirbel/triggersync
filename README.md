@@ -19,7 +19,12 @@ Make footage for cases
 
 
 |---------||-|
-    |   ^    |
+    |   ^       |
+
+output names
+int + pic name + camera name
+
+
 
 
    
